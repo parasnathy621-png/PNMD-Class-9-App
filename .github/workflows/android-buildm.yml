@@ -1,0 +1,99 @@
+name: Android Buildm (robust)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      JAVA_HOME_17: "/usr/lib/jvm/adoptopenjdk-17-hotspot"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Show repo root (debug)
+        run: |
+          echo "=== Repo root listing ==="
+          ls -la || true
+          echo "=== Show top-level files ==="
+          for f in * .[^.]*; do echo "$f"; done || true
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: gradle
+
+      - name: Find gradlew (search common locations)
+        id: find_gradlew
+        run: |
+          echo "Searching for gradlew in repository..."
+          # search common places: root, app/, frontend/android/, frontend/
+          GRADLEW=$(find . -maxdepth 4 -type f -name gradlew | head -n 1 || true)
+          if [ -n "$GRADLEW" ]; then
+            echo "found_gradlew=$GRADLEW" >> $GITHUB_OUTPUT
+            echo "Found gradlew at: $GRADLEW"
+          else
+            echo "found_gradlew=" >> $GITHUB_OUTPUT
+            echo "No gradlew file found under repository (searched up to depth 4)."
+          fi
+
+      - name: If gradlew found -> make executable
+        if: steps.find_gradlew.outputs.found_gradlew != ''
+        run: |
+          echo "Making gradlew executable: ${{ steps.find_gradlew.outputs.found_gradlew }}"
+          chmod +x "${{ steps.find_gradlew.outputs.found_gradlew }}"
+          echo "OK"
+
+      - name: Build with found gradlew
+        if: steps.find_gradlew.outputs.found_gradlew != ''
+        run: |
+          GRADLEW_PATH="${{ steps.find_gradlew.outputs.found_gradlew }}"
+          echo "Running: ./$GRADLEW_PATH assembleDebug"
+          # run in the directory that contains gradlew so wrapper can run with correct cwd
+          GD_DIR=$(dirname "$GRADLEW_PATH")
+          echo "gradlew directory: $GD_DIR"
+          pushd "$GD_DIR"
+          ./gradlew assembleDebug --no-daemon
+          popd
+
+      - name: If no gradlew -> attempt Capacitor web->android (frontend) build
+        if: steps.find_gradlew.outputs.found_gradlew == ''
+        run: |
+          echo "No gradlew found. Checking for frontend/android (Capacitor) structure..."
+          if [ -d "frontend/android" ]; then
+            echo "frontend/android exists. Checking gradlew there..."
+            if [ -f "frontend/android/gradlew" ]; then
+              chmod +x frontend/android/gradlew
+              pushd frontend/android
+              ./gradlew assembleDebug --no-daemon
+              popd
+              exit 0
+            else
+              echo "No gradlew in frontend/android. Maybe Android platform not generated yet."
+            fi
+          else
+            echo "frontend/android not present."
+          fi
+          echo "FAIL: No gradle wrapper found. Please upload the Android project (with gradlew) to repository."
+          echo "Helpful instructions:"
+          echo " - Ensure root or frontend/android contains gradlew and android/ app module (settings.gradle, app/build.gradle)."
+          echo " - If you only have web frontend (React+Capacitor), run locally: npx cap add android then commit frontend/android folder."
+          exit 1
+
+      - name: Upload APK artifact (if present)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pnmd-apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            frontend/android/app/build/outputs/apk/debug/app-debug.apk
+            
