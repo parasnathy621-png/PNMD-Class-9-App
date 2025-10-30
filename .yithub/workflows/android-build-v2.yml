@@ -1,0 +1,40 @@
+name: Android Build CI (Fixed)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 🟢 Check if gradlew exists
+      - name: Check for gradlew file
+        run: |
+          if [ ! -f "./gradlew" ]; then
+            echo "⚠️ gradlew file not found!"
+            echo "Please ensure gradlew exists in your project root."
+            exit 1
+          fi
+
+      # 🟢 Give execute permission
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      # 🟢 Build with Gradle
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+        
