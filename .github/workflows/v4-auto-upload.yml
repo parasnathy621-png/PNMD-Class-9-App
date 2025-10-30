@@ -1,0 +1,25 @@
+name: PNMD V4 Auto Upload
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Download PNMD Class 9 V4 Project
+        run: |
+          curl -L -o pnmd-v4.zip https://github.com/openai-project-assets/class9-pnmd-v4/releases/latest/download/pnmd-v4.zip
+          unzip pnmd-v4.zip -d ./
+
+      - name: Commit and Push Project Files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Add PNMD Class 9 App V4 auto-upload"
+          git push
+          
